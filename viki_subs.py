@@ -27,6 +27,19 @@ class VIKI:
         self._type = None
         self.app = "100000a"
     
+    def print_language_completion(self, ep):
+        lang = self.language.lower()
+        if lang == "all":
+            return
+
+        subs = ep.get("subtitle_completions", {})
+        pct = subs.get(lang)
+
+        episode_index = ep.get("number")
+        pct_display = f"{pct}%" if pct is not None else "N/A"
+
+        print(f"{str(episode_index).ljust(5)} {pct_display.ljust(6)}")
+
     def get_titles(self):
         res = requests.get(
             url=INFO.format(pageid=self.id),
@@ -68,12 +81,13 @@ class VIKI:
                     },
                     headers=HEADERS
                 )
+
                 vid = self.is_valid(vid, "video list")
                 i += 1
                 for episode in vid.get("response", []):
                     if not self.in_range(episode.get("number")):
                         continue
-
+                    self.print_language_completion(episode)
                     titles.append({
                         '_id': episode.get("id"),
                         'title': title,
