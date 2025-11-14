@@ -5,7 +5,7 @@ import math
 import os
 import re
 import sys
-
+import difflib
 import requests
 from requests.exceptions import HTTPError
 
@@ -240,6 +240,7 @@ class VIKI:
                             print(f"    - Completion: {old_pct}% -> {current_pct}%")
                         if checksum_changed:
                             print(f"    - Checksum:  {old_checksum} -> {new_checksum}")
+                            self.show_diff(episode_title, lang, content)
 
                         answer = input(
                             "Do you still want to download this subtitle? [y/N]: "
@@ -287,6 +288,45 @@ class VIKI:
             f"language {lang} (status {res.status_code})"
         )
         return None
+
+    def show_diff(self, title: str, lang: str, new_content: bytes):
+        """
+        Show a unified diff between the existing local SRT file (if any)
+        and the newly downloaded content.
+        """
+        output = self._ensure_output_dir()
+        filename = os.path.join(output, f"{title}.{lang}.srt")
+
+        if not os.path.exists(filename):
+            print("    - Cannot show diff: local subtitle file not found.")
+            return
+
+        try:
+            with open(filename, "r", encoding="utf-8", errors="replace") as f:
+                old_text = f.read().splitlines(keepends=False)
+        except OSError as e:
+            print(f"    - Cannot read local subtitle file for diff: {e}")
+            return
+
+        new_text = new_content.decode("utf-8", errors="replace").splitlines(keepends=False)
+
+        diff = difflib.unified_diff(
+            old_text,
+            new_text,
+            fromfile=f"old/{os.path.basename(filename)}",
+            tofile=f"new/{os.path.basename(filename)}",
+            lineterm="",
+        )
+
+        printed = False
+        print("    - Diff between local and new subtitle:")
+        for line in diff:
+            printed = True
+            print(line)
+
+        if not printed:
+            print("    - No textual differences found despite checksum change.")
+
 
     def save_subtitle_file(self, title, lang, content: bytes):
         output = self._ensure_output_dir()
