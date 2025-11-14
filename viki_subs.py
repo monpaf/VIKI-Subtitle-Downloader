@@ -4,6 +4,7 @@ import hashlib
 import math
 import os
 import re
+import sys
 
 import requests
 from requests.exceptions import HTTPError
@@ -184,19 +185,32 @@ class VIKI:
 
         data = self.get_titles()
 
+        downloaded_any = False
+        language_missing_any = False
+
         for sub in data:
+            # Build episode title used for filenames / metadata
             if self._type == "series":
-                episode_title = f"{sub.get('title')}.S01E{sub.get('episode'):02d}".replace(" ", ".")
+                episode_num = sub.get("episode")
+                episode_title = f"{sub.get('title')}.S01E{episode_num:02d}".replace(" ", ".")
+                ep_label = f"episode {episode_num}"
             else:
                 episode_title = sub.get("title").replace(" ", ".")
+                ep_label = "movie"
 
-            if self.language not in sub.get("subtitle") and self.language != "all":
-                raise ValueError(
-                    f"'{self.language}' subtitle is not available.\n"
-                    f"These are the available subtitles: {sub['subtitle']}"
+            available_langs = sub.get("subtitle") or []
+
+            # ⬇️ CHANGE: instead of raising, just warn and skip this episode
+            if self.language != "all" and self.language not in available_langs:
+                print(
+                    f"[-] '{self.language}' subtitle is not available for {ep_label}."
+                    f" Available: {available_langs}"
                 )
+                language_missing_any = True
+                continue
 
-            for lang in sub.get("subtitle"):
+            # For each available language, filter by requested language
+            for lang in available_langs:
                 if self.language != "all" and lang != self.language:
                     continue
 
@@ -213,7 +227,6 @@ class VIKI:
                 # Compare with stored metadata
                 old_entry = self._get_old_entry(episode_title, lang)
 
-                changed = False
                 if old_entry is not None:
                     old_pct = old_entry.get("percent")
                     old_checksum = old_entry.get("checksum")
@@ -222,7 +235,6 @@ class VIKI:
                     checksum_changed = old_checksum != new_checksum
 
                     if pct_changed or checksum_changed:
-                        changed = True
                         print(f"[*] Changes detected for {episode_title} [{lang}]:")
                         if pct_changed:
                             print(f"    - Completion: {old_pct}% -> {current_pct}%")
@@ -248,6 +260,16 @@ class VIKI:
                 # Update metadata (only after successful write)
                 self._update_entry(episode_title, lang, current_pct, new_checksum)
                 self._save_metadata()
+
+                downloaded_any = True
+
+        # Optional summary if nothing was downloaded for the requested language
+        if not downloaded_any and language_missing_any and self.language != "all":
+            print(
+                f"[-] No subtitles were downloaded because '{self.language}' is not "
+                f"available for the selected episodes."
+            )
+
 
     def fetch_subtitle_content(self, sub_id, lang):
         """Fetch subtitle content (bytes) without writing to disk."""
@@ -318,4 +340,10 @@ if __name__ == "__main__":
     args = parse.parse_args()
 
     start = VIKI(args.url, args.episode, args.language)
-    start.get_subtitle()
+
+    try:
+        start.get_subtitle()
+    except ValueError as e:
+        # Print a clean error message instead of a traceback
+        print(f"[-] {e}")
+        sys.exit(1)
