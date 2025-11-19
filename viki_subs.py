@@ -242,9 +242,15 @@ class VIKI:
                             print(f"    - Checksum:  {old_checksum} -> {new_checksum}")
                             self.show_diff(episode_title, lang, content)
 
-                        answer = input(
-                            "Do you still want to download this subtitle? [y/N]: "
-                        ).strip().lower()
+                        if self._type == "series":
+                            # Include episode number in the prompt (single line)
+                            prompt = (
+                                f"Episode {episode_num}: do you still want to download this subtitle? [y/N]: "
+                            )
+                        else:
+                            prompt = "Do you still want to download this subtitle? [y/N]: "
+
+                        answer = input(prompt).strip().lower()
                         if answer not in ("y", "yes"):
                             print(
                                 f"[-] Skipped download for {episode_title} "
